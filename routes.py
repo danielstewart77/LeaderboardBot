@@ -6,7 +6,12 @@ import sqlite3
 
 router = APIRouter()
 
-FACETS = ["teamwork", "creativity", "wins"]
+FACETS = [
+    "daily_quiet_time",
+    "team_call_attendance",
+    "daily_journaling",
+    "weekly_curriculum"
+]
 
 @router.post("/score")
 def update_score(payload: ScoreUpdate, db: sqlite3.Connection = Depends(get_db)):

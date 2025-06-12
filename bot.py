@@ -7,8 +7,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 LEADERBOARDBOT_TOKEN = os.getenv("LEADERBOARDBOT_TOKEN")
-API_BASE_URL = os.getenv("API_BASE_URL")  # e.g., "https://your-api.azurewebsites.net"
-FACETS = ["teamwork", "creativity", "wins"]
+API_BASE_URL = os.getenv("API_BASE_URL")
+#API_BASE_URL = "http://localhost:9000"
+FACETS = [
+    "daily_quiet_time",
+    "team_call_attendance",
+    "daily_journaling",
+    "weekly_curriculum"
+]
+
+DEFAULT_FACET_POINTS = {
+    "daily_quiet_time": 5,
+    "team_call_attendance": 15,
+    "daily_journaling": 2,
+    "weekly_curriculum": 15
+}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -19,10 +32,15 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 @bot.command()
-async def score(ctx, member: discord.Member, facet: str, amount: int):
+async def score(ctx, member: discord.Member, facet: str, amount: int = None):
     if facet not in FACETS:
-        await ctx.send(f"Invalid facet. Choose from: {', '.join(FACETS)}")
+        await ctx.send(
+            "Invalid facet. Choose from: daily_quiet_time, team_call_attendance, daily_journaling, weekly_curriculum"
+        )
         return
+
+    if amount is None:
+        amount = DEFAULT_FACET_POINTS[facet]
 
     payload = {
         "user_id": str(member.id),
@@ -33,10 +51,12 @@ async def score(ctx, member: discord.Member, facet: str, amount: int):
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{API_BASE_URL}/score", json=payload) as resp:
             if resp.status != 200:
+                data = await resp.text()
+                print(f"API Response: {resp.status} - {data}")
                 await ctx.send("Failed to update score.")
                 return
             data = await resp.json()
-            await ctx.send(f"{member.display_name}'s {facet} score is now {data['score']}")
+            await ctx.send(f"{member.display_name}'s {facet.replace('_', ' ')} score is now {data['score']}")
 
 @bot.command()
 async def leaderboard(ctx):
@@ -47,12 +67,17 @@ async def leaderboard(ctx):
                 return
             data = await resp.json()
 
-    lines = [f"{'Name':<20} " + " ".join(f"{facet[:10]:>10}" for facet in FACETS)]
+    lines = [f"{'Name':<20} " + " ".join(f"{facet.replace('_', ' ')[:16]:>16}" for facet in FACETS)]
     for user_id, facets in data.items():
-        user = ctx.guild.get_member(int(user_id))
-        name = user.display_name if user else user_id
-        line = f"{name:<20} " + " ".join(f"{facets.get(f, 0):>10}" for f in FACETS)
+        try:
+            user = ctx.guild.get_member(int(user_id))
+            name = user.display_name if user else f"User {user_id}"
+        except ValueError:
+            name = f"User {user_id}"  # fallback for test data
+
+        line = f"{name:<20} " + " ".join(f"{facets.get(f, 0):>16}" for f in FACETS)
         lines.append(line)
+
 
     await ctx.send("```" + "\n".join(lines) + "```")
 

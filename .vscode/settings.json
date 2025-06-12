@@ -1,0 +1,4 @@
+{
+    "appService.defaultWebAppToDeploy": "/subscriptions/f0e6eabe-b12d-4f42-9559-48341e571202/resourceGroups/Personal_Fun/providers/Microsoft.Web/sites/leaderboard",
+    "appService.deploySubpath": "."
+}
