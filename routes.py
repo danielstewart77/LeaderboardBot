@@ -1,10 +1,10 @@
 # === routes.py ===
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse, Response
 from models import ScoreUpdate
 from database import get_db
 import sqlite3
-from fastapi.responses import HTMLResponse
-
+import imgkit
 
 router = APIRouter()
 
@@ -32,21 +32,14 @@ def update_score(payload: ScoreUpdate, db: sqlite3.Connection = Depends(get_db))
     db.commit()
     return {"user_id": payload.user_id, "facet": payload.facet, "score": new_score}
 
-@router.get("/leaderboard/html", response_class=HTMLResponse)
+@router.get("/leaderboard", response_class=HTMLResponse)
 def leaderboard_page():
     with open("templates/leaderboard.html") as f:
         return f.read()
 
-
-@router.get("/leaderboard")
-def get_leaderboard(db: sqlite3.Connection = Depends(get_db)):
-    cursor = db.cursor()
-    cursor.execute("SELECT user_id, facet, score FROM scores")
-    data = cursor.fetchall()
-
-    leaderboard = {}
-    for user_id, facet, score in data:
-        if user_id not in leaderboard:
-            leaderboard[user_id] = {f: 0 for f in FACETS}
-        leaderboard[user_id][facet] = score
-    return leaderboard
+@router.get("/leaderboard/image", response_class=Response)
+def leaderboard_image():
+    html_path = "templates/leaderboard.html"
+    config = imgkit.config()  # or specify path to wkhtmltoimage if needed
+    output = imgkit.from_file(html_path, False, config=config)
+    return Response(content=output, media_type="image/png")

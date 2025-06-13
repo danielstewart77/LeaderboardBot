@@ -3,9 +3,10 @@ import discord
 from discord.ext import commands
 import aiohttp
 import os
+import io
 from typing import Optional
 
-# Get env vars
+# Validate env vars
 token_env = os.getenv("LEADERBOARDBOT_TOKEN")
 api_url_env = os.getenv("API_BASE_URL")
 
@@ -14,7 +15,6 @@ if not token_env:
 if not api_url_env:
     raise RuntimeError("Environment variable API_BASE_URL is not set.")
 
-# These are now guaranteed to be strings
 LEADERBOARDBOT_TOKEN: str = token_env
 API_BASE_URL: str = api_url_env
 
@@ -70,30 +70,19 @@ async def score(ctx, member: discord.Member, facet: str, amount: Optional[int] =
 @bot.command()
 async def leaderboard(ctx):
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_BASE_URL}/leaderboard/html") as resp:
+        async with session.get(f"{API_BASE_URL}/leaderboard/image") as resp:
             if resp.status != 200:
-                await ctx.send("Failed to fetch leaderboard.")
+                await ctx.send("Failed to generate leaderboard.")
                 return
-            data = await resp.json()
+            image_bytes = await resp.read()
 
-    lines = [f"{'Name':<20} " + " ".join(f"{facet.replace('_', ' ')[:16]:>16}" for facet in FACETS)]
-    for user_id, facets in data.items():
-        try:
-            user = ctx.guild.get_member(int(user_id))
-            name = user.display_name if user else f"User {user_id}"
-        except ValueError:
-            name = f"User {user_id}"  # fallback for test data
+    await ctx.send(file=discord.File(fp=io.BytesIO(image_bytes), filename="leaderboard.png"))
 
-        line = f"{name:<20} " + " ".join(f"{facets.get(f, 0):>16}" for f in FACETS)
-        lines.append(line)
-
-    await ctx.send("```" + "\n".join(lines) + "```")
-
-# Used by FastAPI lifespan
+# Async version for FastAPI lifespan
 async def run_bot_async():
     print("[BOT] Running bot.run() from lifespan context")
     await bot.start(LEADERBOARDBOT_TOKEN)
 
-# Used when running bot.py directly
+# Standalone run
 if __name__ == "__main__":
     bot.run(LEADERBOARDBOT_TOKEN)
