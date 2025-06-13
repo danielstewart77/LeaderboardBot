@@ -75,13 +75,14 @@ async def score(ctx, member: discord.Member, facet: str, amount: Optional[int] =
 @bot.command()
 async def leaderboard(ctx):
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_BASE_URL}/leaderboard/image") as resp:
+        async with session.get(f"{API_BASE_URL}/leaderboard") as resp:
             if resp.status != 200:
-                await ctx.send("Failed to generate leaderboard.")
+                await ctx.send("Failed to fetch leaderboard.")
                 return
-            image_bytes = await resp.read()
+            markdown = await resp.text()
 
-    await ctx.send(file=discord.File(fp=io.BytesIO(image_bytes), filename="leaderboard.png"))
+    # Send as a code block for Discord formatting
+    await ctx.send(f"```\n{markdown}\n```")
 
 # Async version for FastAPI lifespan
 async def run_bot_async():

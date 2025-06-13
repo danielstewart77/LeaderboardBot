@@ -1,12 +1,12 @@
 # === routes.py ===
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, Response
+from discord import HTTPException
+from fastapi import APIRouter, Depends
+from fastapi.responses import PlainTextResponse
 from models import ScoreUpdate
 from database import get_db
 import sqlite3
-import os
-import asyncio
-from playwright.async_api import async_playwright
+from fastapi import HTTPException
+
 
 router = APIRouter()
 
@@ -34,23 +34,26 @@ def update_score(payload: ScoreUpdate, db: sqlite3.Connection = Depends(get_db))
     db.commit()
     return {"user_id": payload.user_id, "facet": payload.facet, "score": new_score}
 
-@router.get("/leaderboard", response_class=HTMLResponse)
-def leaderboard_page():
-    with open("templates/leaderboard.html") as f:
-        return f.read()
+@router.get("/leaderboard", response_class=PlainTextResponse)
+def leaderboard_markdown(db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT user_id, facet, score FROM scores")
+    rows = cursor.fetchall()
 
-@router.get("/leaderboard/image", response_class=Response)
-def leaderboard_image():
-    html_path = os.path.abspath("templates/leaderboard.html")
+    # Build nested dict: {user_id: {facet: score}}
+    leaderboard = {}
+    for user_id, facet, score in rows:
+        leaderboard.setdefault(user_id, {}).update({facet: score})
 
-    async def render_html_to_png():
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-            page = await browser.new_page()
-            await page.goto(f"file://{html_path}", wait_until="networkidle")
-            image_bytes = await page.screenshot(full_page=True)
-            await browser.close()
-            return image_bytes
+    # Create markdown table
+    lines = []
+    header = "| User ID | " + " | ".join(facet.replace("_", " ").title() for facet in FACETS) + " |"
+    separator = "|" + "|".join(["---"] * (len(FACETS) + 1)) + "|"
+    lines.extend([header, separator])
 
-    image_bytes = asyncio.get_event_loop().run_until_complete(render_html_to_png())
-    return Response(content=image_bytes, media_type="image/png")
+    for user_id, scores in leaderboard.items():
+        row = [f"`{user_id[:6]}`"]  # show partial user ID
+        row.extend(str(scores.get(facet, 0)) for facet in FACETS)
+        lines.append("| " + " | ".join(row) + " |")
+
+    return "\n".join(lines)
