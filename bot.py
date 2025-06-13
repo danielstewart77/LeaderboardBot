@@ -70,7 +70,7 @@ async def score(ctx, member: discord.Member, facet: str, amount: Optional[int] =
 @bot.command()
 async def leaderboard(ctx):
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{API_BASE_URL}/leaderboard") as resp:
+        async with session.get(f"{API_BASE_URL}/leaderboard/html") as resp:
             if resp.status != 200:
                 await ctx.send("Failed to fetch leaderboard.")
                 return
