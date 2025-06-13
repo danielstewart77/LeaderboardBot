@@ -6,6 +6,11 @@ import os
 import io
 from typing import Optional
 
+import logging
+logger = logging.getLogger("uvicorn")
+
+logger.info("[BOT] Launching Playwright browser...")
+
 # Validate env vars
 token_env = os.getenv("LEADERBOARDBOT_TOKEN")
 api_url_env = os.getenv("API_BASE_URL")

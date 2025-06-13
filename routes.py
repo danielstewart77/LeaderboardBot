@@ -4,9 +4,9 @@ from fastapi.responses import HTMLResponse, Response
 from models import ScoreUpdate
 from database import get_db
 import sqlite3
-from fastapi.responses import Response
+import os
 import asyncio
-from pyppeteer import launch
+from playwright.async_api import async_playwright
 
 router = APIRouter()
 
@@ -41,15 +41,16 @@ def leaderboard_page():
 
 @router.get("/leaderboard/image", response_class=Response)
 def leaderboard_image():
-    html_path = "templates/leaderboard.html"
+    html_path = os.path.abspath("templates/leaderboard.html")
 
     async def render_html_to_png():
-        browser = await launch(headless=True, args=['--no-sandbox'])
-        page = await browser.newPage()
-        await page.goto(f"file://{os.path.abspath(html_path)}")
-        image_bytes = await page.screenshot(fullPage=True)
-        await browser.close()
-        return image_bytes
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+            page = await browser.new_page()
+            await page.goto(f"file://{html_path}", wait_until="networkidle")
+            image_bytes = await page.screenshot(full_page=True)
+            await browser.close()
+            return image_bytes
 
     image_bytes = asyncio.get_event_loop().run_until_complete(render_html_to_png())
     return Response(content=image_bytes, media_type="image/png")
