@@ -3,8 +3,6 @@ import discord
 from discord.ext import commands
 import aiohttp
 import os
-from dotenv import load_dotenv
-load_dotenv()
 
 LEADERBOARDBOT_TOKEN = os.getenv("LEADERBOARDBOT_TOKEN")
 API_BASE_URL = os.getenv("API_BASE_URL")
