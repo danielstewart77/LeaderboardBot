@@ -4,7 +4,9 @@ from fastapi.responses import HTMLResponse, Response
 from models import ScoreUpdate
 from database import get_db
 import sqlite3
-import imgkit
+from fastapi.responses import Response
+import asyncio
+from pyppeteer import launch
 
 router = APIRouter()
 
@@ -40,6 +42,14 @@ def leaderboard_page():
 @router.get("/leaderboard/image", response_class=Response)
 def leaderboard_image():
     html_path = "templates/leaderboard.html"
-    config = imgkit.config()  # or specify path to wkhtmltoimage if needed
-    output = imgkit.from_file(html_path, False, config=config)
-    return Response(content=output, media_type="image/png")
+
+    async def render_html_to_png():
+        browser = await launch(headless=True, args=['--no-sandbox'])
+        page = await browser.newPage()
+        await page.goto(f"file://{os.path.abspath(html_path)}")
+        image_bytes = await page.screenshot(fullPage=True)
+        await browser.close()
+        return image_bytes
+
+    image_bytes = asyncio.get_event_loop().run_until_complete(render_html_to_png())
+    return Response(content=image_bytes, media_type="image/png")
