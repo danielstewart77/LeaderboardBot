@@ -16,9 +16,11 @@
     <thead>
       <tr>
         <th>User</th>
+        <th>Daily Quiet Time</th>
+        <th>Team Call Attendance</th>
+        <th>Daily Journaling</th>
+        <th>Weekly Curriculum</th>
         <th>Teamwork</th>
-        <th>Creativity</th>
-        <th>Wins</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -29,7 +31,7 @@
       const res = await fetch("/leaderboard");
       const json = await res.json();
       const rows = Object.entries(json).map(([user, facets]) => {
-        return [user, facets.teamwork || 0, facets.creativity || 0, facets.wins || 0];
+        return [user, facets.daily_quiet_time || 0, facets.team_call_attendance || 0, facets.daily_journaling || 0, facets.weekly_curriculum || 0, facets.teamwork || 0];
       });
       const table = $('#leaderboard').DataTable();
       table.clear();
