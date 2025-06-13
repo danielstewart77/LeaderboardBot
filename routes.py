@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import ScoreUpdate
 from database import get_db
 import sqlite3
+from fastapi.responses import HTMLResponse
+
 
 router = APIRouter()
 
@@ -29,6 +31,11 @@ def update_score(payload: ScoreUpdate, db: sqlite3.Connection = Depends(get_db))
         cursor.execute("INSERT INTO scores (user_id, facet, score) VALUES (?, ?, ?)", (payload.user_id, payload.facet, new_score))
     db.commit()
     return {"user_id": payload.user_id, "facet": payload.facet, "score": new_score}
+
+@router.get("/leaderboard/html", response_class=HTMLResponse)
+def leaderboard_page():
+    with open("templates/leaderboard.html") as f:
+        return f.read()
 
 
 @router.get("/leaderboard")
