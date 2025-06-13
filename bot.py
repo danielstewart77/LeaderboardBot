@@ -83,4 +83,6 @@ async def leaderboard(ctx):
 
 if LEADERBOARDBOT_TOKEN is None:
     raise ValueError("LEADERBOARDBOT_TOKEN environment variable is not set.")
-bot.run(LEADERBOARDBOT_TOKEN)
+
+if __name__ == "__main__":
+    bot.run(LEADERBOARDBOT_TOKEN)
