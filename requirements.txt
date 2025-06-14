@@ -3,3 +3,8 @@ python-dotenv
 fastapi
 uvicorn
 aiohttp
+Jinja2
+playwright
+Pillow
+psycopg2-binary
+SQLAlchemy

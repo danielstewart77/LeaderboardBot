@@ -1,49 +1,79 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Discord Leaderboard</title>
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
-  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <style>
-    body { font-family: sans-serif; padding: 2rem; background: #f0f2f5; }
-    table { width: 100%; border-collapse: collapse; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard</title>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <style>
+        body { font-family: sans-serif; padding: 2rem; background: #f0f2f5; color: #333; }
+        h1 { color: #1a237e; text-align: center; margin-bottom: 2rem; }
+        table.leaderboard-table { /* Added class for Playwright selector */
+            border-collapse: collapse;
+            width: 90%; /* Max width */
+            margin: 0 auto; /* Center table */
+            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+            background-color: #fff;
+            border-radius: 8px;
+            overflow: hidden; /* For border-radius to work on table */
+        }
+        th, td {
+            border: 1px solid #ddd; /* Lighter border */
+            padding: 12px 15px; /* More padding */
+            text-align: left;
+        }
+        th {
+            background-color: #3f51b5; /* Primary color */
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        tr:nth-child(even) { background-color: #f8f9fa; } /* Zebra striping */
+        tr:hover { background-color: #e9ecef; } /* Hover effect */
+        /* Styles for DataTables elements */
+        .dataTables_wrapper .dataTables_length, 
+        .dataTables_wrapper .dataTables_filter, 
+        .dataTables_wrapper .dataTables_info, 
+        .dataTables_wrapper .dataTables_paginate {
+            margin-bottom: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
 </head>
 <body>
-  <h1>Discord Leaderboard</h1>
-  <table id="leaderboard" class="display">
-    <thead>
-      <tr>
-        <th>User</th>
-        <th>Daily Quiet Time</th>
-        <th>Team Call Attendance</th>
-        <th>Daily Journaling</th>
-        <th>Weekly Curriculum</th>
-        <th>Teamwork</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <h1>Leaderboard</h1>
+    <table id="leaderboard" class="leaderboard-table display">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Total Score</th>
+                {% for facet_name in all_possible_facets %}
+                <th>{{ facet_name.replace("_", " ") | title }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for user_entry in leaderboard %}
+            <tr>
+                <td>{{ user_entry.user_id }}</td>
+                <td>{{ user_entry.total_score }}</td>
+                {% for facet_name in all_possible_facets %}
+                <td>{{ user_entry.facets.get(facet_name, 0) }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-  <script>
-    async function fetchData() {
-      const res = await fetch("/leaderboard");
-      const json = await res.json();
-      const rows = Object.entries(json).map(([user, facets]) => {
-        return [user, facets.daily_quiet_time || 0, facets.team_call_attendance || 0, facets.daily_journaling || 0, facets.weekly_curriculum || 0, facets.teamwork || 0];
-      });
-      const table = $('#leaderboard').DataTable();
-      table.clear();
-      table.rows.add(rows);
-      table.draw();
-    }
-
-    $(document).ready(function () {
-      $('#leaderboard').DataTable();
-      fetchData();
-      setInterval(fetchData, 10000); // refresh every 10s
-    });
-  </script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#leaderboard').DataTable({
+                "pageLength": 10, // Default number of rows
+                "lengthMenu": [ [10, 25, 50, -1], [10, 25, 50, "All"] ] // Rows per page options
+            });
+        });
+    </script>
 </body>
 </html>

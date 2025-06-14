@@ -1,0 +1,94 @@
+# commands.txt
+
+# Prerequisites:
+# 1. Azure CLI installed and configured (run `az login` if you haven't).
+# 2. Docker Desktop installed and running.
+# 3. You know your Azure Container Registry (ACR) name.
+# 4. You know the Azure Resource Group where your Container Apps are/will be.
+
+# --- Configuration Variables (Replace placeholders) ---
+ACR_NAME="YOUR_ACR_NAME"
+RESOURCE_GROUP="YOUR_RESOURCE_GROUP"
+BOT_IMAGE_NAME="leaderboardbot/bot" # Image name for the bot in ACR
+API_IMAGE_NAME="leaderboardbot/api" # Image name for the API in ACR
+IMAGE_TAG="latest" # Or a specific version tag, e.g., "1.0.0"
+
+# --- Azure Authentication ---
+# 1. Login to Azure CLI (if not already done)
+#    This will open a browser for authentication.
+az login
+
+# 2. Login to your Azure Container Registry (ACR)
+az acr login --name ${ACR_NAME}
+
+# --- Build and Push Discord Bot Image (to be run by 'leaderboard-bot' Container App) ---
+# 1. Build the Docker image for the Discord Bot
+#    This command should be run from the root of your project directory (e.g., /home/daniel/Storage/Dev/LeaderboardBot)
+docker build -t ${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile.bot .
+
+# 2. Push the Bot image to ACR
+docker push ${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}
+
+# 3. Update the existing 'leaderboard-bot' Container App to use the new Bot image
+#    This command tells Azure to pull the new bot image and create a new revision.
+az containerapp update --name leaderboard-bot --resource-group ${RESOURCE_GROUP} --image ${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}
+
+# 4. Configure Environment Variables for 'leaderboard-bot' (Bot) Container App:
+#    Go to the Azure Portal, find your 'leaderboard-bot' Container App:
+#    - Navigate to your Container App -> "Settings" -> "Secrets" (for sensitive values like tokens) 
+#      or "Settings" -> "Environment variables" under the "App" section when editing a revision.
+#    - Ensure the following environment variables are set:
+#      - LEADERBOARDBOT_TOKEN: Your Discord bot token (consider storing as a secret).
+#      - API_BASE_URL: The URL of your 'leaderboard-api' Container App (you'll get this after creating and deploying the API app).
+#    - If you make changes to environment variables, a new revision might be created automatically, or you might need to trigger one.
+#      The `az containerapp update` command above will also trigger a new revision if the image changes.
+
+# --- Build and Push FastAPI API Image (to be run by new 'leaderboard-api' Container App) ---
+# 1. Build the Docker image for the API
+#    This command should be run from the root of your project directory
+docker build -t ${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG} -f Dockerfile_api .
+
+# 2. Push the API image to ACR
+docker push ${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}
+
+# 3. Create the new 'leaderboard-api' Container App in Azure:
+#    As you mentioned, you'll do this via the Azure GUI. Here's a reminder of key steps:
+#    - Go to Azure Portal -> Container Apps -> "Create".
+#    - Subscription: Your subscription.
+#    - Resource group: ${RESOURCE_GROUP}.
+#    - Container app name: leaderboard-api
+#    - Region: Your preferred region.
+#    - Container Apps Environment: Select your existing one or create a new one.
+#    - Click "Next" or navigate to App settings / Container settings.
+#    - Image source: "Azure Container Registry".
+#    - Registry: Select ${ACR_NAME}.
+#    - Image: Select ${API_IMAGE_NAME} (e.g., leaderboardbot/api).
+#    - Image tag: Select ${IMAGE_TAG} (e.g., latest).
+#    - CPU / Memory: Choose appropriate resources (e.g., 0.25 CPU, 0.5 Gi memory to start).
+#    - Ingress:
+#      - Enable Ingress.
+#      - Accepting traffic from: "Anywhere".
+#      - Target port: 8000 (this should match the port your API listens on inside the container, as defined in Dockerfile_api CMD).
+#    - Environment Variables (under "App" section when editing revision, or "Secrets"):
+#      - Add the following:
+#        - POSTGRES_HOST: Your PostgreSQL server address.
+#        - POSTGRES_PORT: Your PostgreSQL server port (e.g., 5432).
+#        - POSTGRES_USER: Your PostgreSQL username.
+#        - POSTGRES_PASSWORD: Your PostgreSQL password (store as a secret).
+#        - POSTGRES_DB: Your PostgreSQL database name.
+#        - RUN_DISCORD_BOT: Set to "0" (to ensure the API doesn't try to start the bot).
+#    - Review and create the Container App.
+#    - Once created, note its "Application Url". This URL is what you'll use for the API_BASE_URL environment variable in your 'leaderboard-bot' (Bot) Container App.
+
+# --- General Deployment / Restart Notes ---
+# - Updating an image (as shown with `az containerapp update`) automatically creates a new revision, and traffic shifts to it based on your revision management settings (default is latest revision gets 100% traffic).
+# - If you only change environment variables via the Azure Portal or CLI, this also typically creates a new revision.
+# - To manually restart the latest revision of an app (e.g., if it seems stuck but no config/image changed):
+#   az containerapp revision restart --name <app-name> --resource-group ${RESOURCE_GROUP} --revision <revision-name>
+#   (Replace <app-name> with 'leaderboard-bot' or 'leaderboard-api'. You can find revision names in the portal or via `az containerapp revision list`)
+#   However, `az containerapp update` is the more common way to deploy changes that involve new images or significant configuration.
+
+# - Remember to set the API_BASE_URL for the 'leaderboard-bot' Container App *after* the 'leaderboard-api' Container App is created and you have its URL.
+#   You might need to update 'leaderboard-bot' one more time if its `API_BASE_URL` env var changes. You can do this via the portal or CLI:
+#   az containerapp update --name leaderboard-bot --resource-group ${RESOURCE_GROUP} --set-env-vars API_BASE_URL=https://your-new-api-url.azurecontainerapps.io
+#   (Or do this through the portal by creating a new revision with the updated environment variable)
