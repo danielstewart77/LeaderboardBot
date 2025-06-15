@@ -111,13 +111,6 @@ echo "REMINDER: For '${EXISTING_API_CONTAINER_APP_NAME}', ensure PostgreSQL conn
 echo "Once '${EXISTING_API_CONTAINER_APP_NAME}' is updated and running, note its Application URL."
 
 
-# --- Final Reminders ---
-echo "
---- Step 9: Verify API URL for Bot App ---"
-echo "After the '${EXISTING_API_CONTAINER_APP_NAME}' (API) Container App is updated and you have confirmed its Application URL,"
-echo "you MUST ensure the 'API_BASE_URL' environment variable for the '${EXISTING_BOT_CONTAINER_APP_NAME}' (Bot) Container App is correctly set to this URL."
-echo "If it needs changing, you can update it via the Azure Portal or using a command like:"
-echo "  az containerapp update --name ${EXISTING_BOT_CONTAINER_APP_NAME} --resource-group ${RESOURCE_GROUP} --set-env-vars API_BASE_URL=https://your-api-app-url.azurecontainerapps.io"
 
 echo "
 --- Azure Deployment Script Finished ---"
