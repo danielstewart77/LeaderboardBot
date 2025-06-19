@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Teams</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+</head>
+<body>
+    <h1>Team Management</h1>
+    <div class="form-container">
+        <h2>Create a New Team</h2>
+        <form id="createTeamForm" onsubmit="return false;">
+            <div class="form-group">
+                <label for="teamNameCreate">Team Name</label>
+                <input type="text" id="teamNameCreate" name="name" required>
+            </div>
+            <button type="submit" class="btn">Create Team</button>
+        </form>
+        <div id="responseMessage"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="{{ url_for('static', path='/script.js') }}"></script>
+</body>
+</html>

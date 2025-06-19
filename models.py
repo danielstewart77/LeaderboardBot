@@ -1,8 +1,8 @@
 # === models.py ===
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
 import os
 
 from dotenv import load_dotenv
@@ -39,11 +39,38 @@ class Leaderboard(Base):
     # from sqlalchemy.schema import UniqueConstraint
     # __table_args__ = (UniqueConstraint('user_id', 'facet', name='_user_facet_uc'),)
 
+# New SQLAlchemy models for Teams and Users
+class Team(Base):
+    __tablename__ = "leaderboard_teams"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    
+    # Relationship to the User model
+    users = relationship("User", back_populates="team")
+
+class User(Base):
+    __tablename__ = "leaderboard_users"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False) # Discord username#discriminator
+    group_id = Column(Integer, ForeignKey("leaderboard_teams.id"))
+
+    # Relationship to the Team model
+    team = relationship("Team", back_populates="users")
+
+
 # Pydantic model for request body
 class ScoreUpdate(BaseModel):
     user_id: str
     facet: str
     amount: int
+
+# Pydantic models for new routes
+class TeamCreate(BaseModel):
+    name: str
+
+class UserTeamAssign(BaseModel):
+    user_name: str
+    team_name: str
 
 # Function to create tables (call this once at startup if tables don't exist)
 def create_tables():

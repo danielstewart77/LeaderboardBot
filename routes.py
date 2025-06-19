@@ -1,9 +1,9 @@
 # === routes.py ===
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from models import ScoreUpdate
-from database import get_db, add_score as db_add_score, get_leaderboard_data as db_get_leaderboard_data, get_all_scores_by_user
+from models import ScoreUpdate, TeamCreate, UserTeamAssign
+from database import get_db, add_score as db_add_score, get_leaderboard_data as db_get_leaderboard_data, get_all_scores_by_user, add_team, add_user_to_team, get_all_teams, get_all_users, get_team_leaderboard_data
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 import tempfile
@@ -56,20 +56,26 @@ async def get_leaderboard_html(request: Request, db: Session = Depends(get_db)):
     for summary_item in leaderboard_summary:
         user_id = summary_item["user_id"]
         total_score = summary_item["total_score"]
+        team_name = summary_item["team_name"]  # Include team_name from the database query
         facet_scores_list = get_all_scores_by_user(db, user_id)
         # Convert list of facet scores to a dict for easier template access
         facets_for_user = {item["facet"]: item["score"] for item in facet_scores_list}
         detailed_leaderboard.append({
             "user_id": user_id,
             "total_score": total_score,
+            "team_name": team_name,  # Include team_name in the detailed leaderboard
             "facets": facets_for_user
         })
+
+    # Fetch team leaderboard data
+    team_leaderboard = get_team_leaderboard_data(db)
 
     return templates.TemplateResponse(
         "leaderboard.html", 
         {
             "request": request, 
             "leaderboard": detailed_leaderboard, # Pass the detailed structure
+            "team_leaderboard": team_leaderboard, # Pass the team leaderboard data
             "all_possible_facets": FACETS # Pass all possible facets for consistent column rendering
         }
     )
@@ -126,3 +132,53 @@ async def get_leaderboard_discord(request: Request, db: Session = Depends(get_db
         filename="leaderboard.png",
         background=BackgroundTask(cleanup_temp_file, path=tmp_file_path)
     )
+
+@router.post("/create_team")
+def create_team(team_data: TeamCreate, db: Session = Depends(get_db)):
+    """
+    Creates a new team.
+    """
+    # This import is needed here to avoid circular dependency issues with models
+    from models import Team
+    
+    existing_team = db.query(Team).filter(Team.name == team_data.name).first()
+    if existing_team:
+        raise HTTPException(status_code=400, detail=f"Team '{team_data.name}' already exists.")
+        
+    new_team = add_team(db, team_name=team_data.name)
+    return {"id": new_team.id, "name": new_team.name}
+
+@router.post("/assign_user_to_team")
+def assign_user_to_team(assignment: UserTeamAssign, db: Session = Depends(get_db)):
+    """
+    Assigns a user to a team. Creates the user if they don't exist.
+    """
+    updated_user = add_user_to_team(db, user_name=assignment.user_name, team_name=assignment.team_name)
+    
+    if not updated_user:
+        raise HTTPException(status_code=404, detail=f"Team '{assignment.team_name}' not found.")
+        
+    return {
+        "user_name": updated_user.name,
+        "team_name": updated_user.team.name
+    }
+
+@router.get("/get_users", response_class=JSONResponse)
+def get_users_route(db: Session = Depends(get_db)):
+    users = get_all_users(db)
+    return [user.name for user in users]
+
+@router.get("/get_teams", response_class=JSONResponse)
+def get_teams_route(db: Session = Depends(get_db)):
+    teams = get_all_teams(db)
+    return [team.name for team in teams]
+
+@router.get("/users", response_class=HTMLResponse)
+async def get_users_page(request: Request, db: Session = Depends(get_db)):
+    users = get_all_users(db)
+    teams = get_all_teams(db)
+    return templates.TemplateResponse("users.html", {"request": request, "users": users, "teams": teams})
+
+@router.get("/teams", response_class=HTMLResponse)
+async def get_teams_page(request: Request):
+    return templates.TemplateResponse("teams.html", {"request": request})

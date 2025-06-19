@@ -32,8 +32,8 @@ app = FastAPI(title="Discord Leaderboard API", lifespan=lifespan)
 app.include_router(router) # Ensure routes in routes.py use Depends(get_db)
 
 # Static files mounting - ensure 'static' directory exists or is created if needed
-# os.makedirs("static", exist_ok=True) # If you have static files served by FastAPI
-# app.mount("/static", StaticFiles(directory="static"), name="static")
+os.makedirs("static", exist_ok=True) # If you have static files served by FastAPI
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # The 'data' directory for SQLite is no longer needed for PostgreSQL
 # os.makedirs("data", exist_ok=True)

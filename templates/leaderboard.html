@@ -5,47 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leaderboard</title>
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-    <style>
-        body { font-family: sans-serif; padding: 2rem; background: #f0f2f5; color: #333; }
-        h1 { color: #1a237e; text-align: center; margin-bottom: 2rem; }
-        table.leaderboard-table { /* Added class for Playwright selector */
-            border-collapse: collapse;
-            width: 90%; /* Max width */
-            margin: 0 auto; /* Center table */
-            box-shadow: 0 2px 15px rgba(0,0,0,0.1);
-            background-color: #fff;
-            border-radius: 8px;
-            overflow: hidden; /* For border-radius to work on table */
-        }
-        th, td {
-            border: 1px solid #ddd; /* Lighter border */
-            padding: 12px 15px; /* More padding */
-            text-align: left;
-        }
-        th {
-            background-color: #3f51b5; /* Primary color */
-            color: white;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        tr:nth-child(even) { background-color: #f8f9fa; } /* Zebra striping */
-        tr:hover { background-color: #e9ecef; } /* Hover effect */
-        /* Styles for DataTables elements */
-        .dataTables_wrapper .dataTables_length, 
-        .dataTables_wrapper .dataTables_filter, 
-        .dataTables_wrapper .dataTables_info, 
-        .dataTables_wrapper .dataTables_paginate {
-            margin-bottom: 1rem;
-            margin-top: 1rem;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
 </head>
 <body>
-    <h1>Leaderboard</h1>
+    <h1>Leaders of Men</h1>
     <table id="leaderboard" class="leaderboard-table display">
         <thead>
             <tr>
+                <th>Medal</th>
                 <th>User</th>
+                <th>Team</th>
                 <th>Total Score</th>
                 {% for facet_name in all_possible_facets %}
                 <th>{{ facet_name.replace("_", " ") | title }}</th>
@@ -53,27 +22,78 @@
             </tr>
         </thead>
         <tbody>
+            {% set unique_scores = [] %}
             {% for user_entry in leaderboard %}
+                {% if user_entry.total_score not in unique_scores %}
+                    {% set _ = unique_scores.append(user_entry.total_score) %}
+                {% endif %}
+            {% endfor %}
+            
+            {% for user_entry in leaderboard %}
+                {% set score_rank = unique_scores.index(user_entry.total_score) + 1 %}
+                {% if score_rank <= 3 %}
+                    <tr>
+                        <td>
+                            {% if score_rank == 1 %}
+                                🥇 Gold
+                            {% elif score_rank == 2 %}
+                                🥈 Silver
+                            {% elif score_rank == 3 %}
+                                🥉 Bronze
+                            {% endif %}
+                        </td>
+                        <td>{{ user_entry.user_id }}</td>
+                        <td>{{ user_entry.team_name if user_entry.team_name else 'N/A' }}</td>
+                        <td>{{ user_entry.total_score }}</td>
+                        {% for facet_name in all_possible_facets %}
+                        <td>{{ user_entry.facets.get(facet_name, 0) }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h1>Top Teams</h1>
+    <table id="teamLeaderboard" class="leaderboard-table display">
+        <thead>
             <tr>
-                <td>{{ user_entry.user_id }}</td>
-                <td>{{ user_entry.total_score }}</td>
-                {% for facet_name in all_possible_facets %}
-                <td>{{ user_entry.facets.get(facet_name, 0) }}</td>
-                {% endfor %}
+                <th>Medal</th>
+                <th>Team</th>
+                <th>Total Score</th>
             </tr>
+        </thead>
+        <tbody>
+            {% set unique_team_scores = [] %}
+            {% for team_entry in team_leaderboard %}
+                {% if team_entry.total_score not in unique_team_scores %}
+                    {% set _ = unique_team_scores.append(team_entry.total_score) %}
+                {% endif %}
+            {% endfor %}
+            
+            {% for team_entry in team_leaderboard %}
+                {% set team_score_rank = unique_team_scores.index(team_entry.total_score) + 1 %}
+                {% if team_score_rank <= 3 %}
+                    <tr>
+                        <td>
+                            {% if team_score_rank == 1 %}
+                                🥇 Gold
+                            {% elif team_score_rank == 2 %}
+                                🥈 Silver
+                            {% elif team_score_rank == 3 %}
+                                🥉 Bronze
+                            {% endif %}
+                        </td>
+                        <td>{{ team_entry.team_name }}</td>
+                        <td>{{ team_entry.total_score }}</td>
+                    </tr>
+                {% endif %}
             {% endfor %}
         </tbody>
     </table>
 
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script>
-        $(document).ready(function () {
-            $('#leaderboard').DataTable({
-                "pageLength": 10, // Default number of rows
-                "lengthMenu": [ [10, 25, 50, -1], [10, 25, 50, "All"] ] // Rows per page options
-            });
-        });
-    </script>
+    <script src="{{ url_for('static', path='/script.js') }}"></script>
 </body>
 </html>
