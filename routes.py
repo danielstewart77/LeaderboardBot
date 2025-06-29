@@ -31,7 +31,14 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 async def update_score(payload: ScoreUpdate, db: Session = Depends(get_db)):
     if payload.facet not in FACETS:
         raise HTTPException(status_code=400, detail="Invalid facet")
-    
+    # Ensure the user exists in leaderboard_users
+    from models import User
+    if not db.query(User).filter(User.name == payload.user_id).first():
+        new_user = User(name=payload.user_id)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
     # Use the new database function
     updated_entry = db_add_score(db, payload)
     
@@ -182,3 +189,47 @@ async def get_users_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/teams", response_class=HTMLResponse)
 async def get_teams_page(request: Request):
     return templates.TemplateResponse("teams.html", {"request": request})
+
+@router.get("/get_user_scores/{user_id}", response_class=JSONResponse)
+def get_user_scores_route(user_id: str, db: Session = Depends(get_db)):
+    """Get all facet scores for a specific user."""
+    user_scores = get_all_scores_by_user(db, user_id)
+    if not user_scores:
+        raise HTTPException(status_code=404, detail=f"No scores found for user '{user_id}'")
+    return user_scores
+
+@router.get("/get_team_scores/{team_name}", response_class=JSONResponse)
+def get_team_scores_route(team_name: str, db: Session = Depends(get_db)):
+    """Get aggregated scores for a specific team."""
+    from models import Team, User
+    
+    # Find the team
+    team = db.query(Team).filter(Team.name == team_name).first()
+    if not team:
+        raise HTTPException(status_code=404, detail=f"Team '{team_name}' not found")
+    
+    # Get all team members
+    team_members = db.query(User).filter(User.group_id == team.id).all()
+    member_names = [member.name for member in team_members]
+    
+    if not team_members:
+        raise HTTPException(status_code=404, detail=f"Team '{team_name}' has no members")
+    
+    # Aggregate scores by facet for all team members
+    facet_totals = {}
+    total_score = 0
+    
+    for member in team_members:
+        member_scores = get_all_scores_by_user(db, str(member.name))
+        for score_data in member_scores:
+            facet = score_data['facet']
+            score = score_data['score']
+            facet_totals[facet] = facet_totals.get(facet, 0) + score
+            total_score += score
+    
+    return {
+        "team_name": team_name,
+        "total_score": total_score,
+        "facet_scores": facet_totals,
+        "members": member_names
+    }

@@ -23,7 +23,7 @@ def add_score(db: Session, score_update: ScoreUpdate) -> Leaderboard:
 
     if db_score:
         # If exists, add the new amount to the existing score
-        db_score.score += score_update.amount
+        db_score.score = db_score.score + score_update.amount  # type: ignore[reportAttributeAccessIssue]
     else:
         # If not exists, create a new record
         db_score = Leaderboard(
@@ -42,9 +42,9 @@ def get_user_score_for_facet(db: Session, user_id: str, facet: str) -> int:
         Leaderboard.user_id == user_id, 
         Leaderboard.facet == facet
     ).first()
-    return db_score.score if db_score else 0
+    return db_score[0] if db_score else 0
 
-def get_leaderboard_data(db: Session) -> List[Dict[str, any]]:
+def get_leaderboard_data(db: Session) -> List[Dict[str, Any]]:
     """
     Fetches aggregated leaderboard data, joining with user and team info.
     Each item contains user_id, total_score, and team_name.
@@ -68,12 +68,12 @@ def get_leaderboard_data(db: Session) -> List[Dict[str, any]]:
     ]
     return leaderboard_list
 
-def get_all_scores_by_user(db: Session, user_id: str) -> List[Dict[str, any]]:
+def get_all_scores_by_user(db: Session, user_id: str) -> List[Dict[str, Any]]:
     """Fetches all facet scores for a specific user."""
     results = db.query(Leaderboard.facet, Leaderboard.score).filter(Leaderboard.user_id == user_id).all()
     user_scores = []
     for row in results:
-        user_scores.append({"facet": row.facet, "score": row.score})
+        user_scores.append({"facet": row[0], "score": row[1]})  # Fix to access tuple elements
     return user_scores
 
 def add_team(db: Session, team_name: str) -> Team:

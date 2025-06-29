@@ -49,7 +49,7 @@ bot = commands.Bot(command_prefix="!", intents=intents) # Changed: client -> bot
 # tree = app_commands.CommandTree(client) # This was the old way, now it's client.tree
 
 # Guild ID for testing - commands update instantly. Remove for global commands.
-TEST_GUILD_ID = discord.Object(id=1233578210009026580) # Replace with your server ID
+TEST_GUILD_ID = False #discord.Object(id=1233578210009026580) # Replace with your server ID
 
 @bot.event # Changed: client -> bot
 async def on_ready():
@@ -57,6 +57,9 @@ async def on_ready():
     try:
         # If using a specific guild for testing:
         if TEST_GUILD_ID:
+            logger.info("Clearing existing commands...")
+            bot.tree.clear_commands(guild=TEST_GUILD_ID)
+
             await bot.tree.sync(guild=TEST_GUILD_ID) # Changed: client -> bot
             logger.info(f"Synced commands to guild {TEST_GUILD_ID.id}")
         else:
@@ -146,6 +149,109 @@ async def journal_slash(interaction: discord.Interaction, member: discord.Member
 async def homework_slash(interaction: discord.Interaction, member: discord.Member, points: Optional[int] = None):
     await update_score_for_facet(interaction, member, "homework", points)
 
+@bot.tree.command(name="my_score", description="Show a user's individual scores for all facets.")
+@app_commands.describe(user="The user to check scores for.")
+async def my_score_slash(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Get user's individual facet scores
+            scores_url = f"{API_BASE_URL}/get_user_scores/{str(user)}"
+            async with session.get(scores_url) as resp:
+                if resp.status == 200:
+                    user_scores = await resp.json()
+                    
+                    # Build formatted message
+                    embed = discord.Embed(
+                        title=f"📊 {user.display_name}'s Scores",
+                        color=0x3498db
+                    )
+                    
+                    total_score = 0
+                    for facet_data in user_scores:
+                        facet_name = facet_data['facet'].replace('_', ' ').title()
+                        score = facet_data['score']
+                        total_score += score
+                        embed.add_field(name=facet_name, value=f"{score} points", inline=True)
+                    
+                    embed.add_field(name="🏆 Total Score", value=f"{total_score} points", inline=False)
+                    embed.set_thumbnail(url=user.display_avatar.url)
+                    
+                    await interaction.followup.send(embed=embed)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /get_user_scores: {resp.status} - {error_message}")
+                    await interaction.followup.send(f"Failed to fetch scores for {user.display_name}. User may not have any scores yet.", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error fetching user scores: {e}")
+            await interaction.followup.send("Could not connect to the Leaderboard API to fetch user scores.", ephemeral=True)
+
+async def team_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete function to fetch available teams."""
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"{API_BASE_URL}/get_teams") as resp:
+                if resp.status == 200:
+                    teams = await resp.json()
+                    # Filter teams based on current input and return up to 25 choices
+                    filtered_teams = [team for team in teams if current.lower() in team.lower()]
+                    return [
+                        app_commands.Choice(name=team, value=team)
+                        for team in filtered_teams[:25]  # Discord limits to 25 choices
+                    ]
+                else:
+                    return []
+        except Exception:
+            return []
+
+@bot.tree.command(name="my_team", description="Show team's total scores for all facets.")
+@app_commands.describe(team_name="The team to check scores for.")
+@app_commands.autocomplete(team_name=team_autocomplete)
+async def my_team_slash(interaction: discord.Interaction, team_name: str):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # Get team's aggregated scores
+            team_url = f"{API_BASE_URL}/get_team_scores/{team_name}"
+            async with session.get(team_url) as resp:
+                if resp.status == 200:
+                    team_data = await resp.json()
+                    
+                    # Build formatted message
+                    embed = discord.Embed(
+                        title=f"🏆 Team {team_name} Scores",
+                        color=0xe74c3c
+                    )
+                    
+                    total_score = team_data.get('total_score', 0)
+                    facet_scores = team_data.get('facet_scores', {})
+                    members = team_data.get('members', [])
+                    
+                    # Add facet scores
+                    for facet, score in facet_scores.items():
+                        facet_name = facet.replace('_', ' ').title()
+                        embed.add_field(name=facet_name, value=f"{score} points", inline=True)
+                    
+                    embed.add_field(name="🏆 Total Team Score", value=f"{total_score} points", inline=False)
+                    
+                    if members:
+                        member_list = ", ".join(members)
+                        embed.add_field(name="👥 Team Members", value=member_list, inline=False)
+                    
+                    await interaction.followup.send(embed=embed)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /get_team_scores: {resp.status} - {error_message}")
+                    await interaction.followup.send(f"Failed to fetch scores for team '{team_name}'. Team may not exist or have no scores.", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error fetching team scores: {e}")
+            await interaction.followup.send("Could not connect to the Leaderboard API to fetch team scores.", ephemeral=True)
+
 # --- FastAPI Lifespan Integration (Optional) ---
 # This part is for running the bot alongside a FastAPI server in the same process.
 # If you run bot.py standalone, the if __name__ == "__main__": block will be used.
@@ -168,6 +274,7 @@ async def lifespan(app):
 
 # --- Standalone Bot Running --- 
 if __name__ == "__main__":
+    print("✅ Bot container started and reached __main__ block.")
     logger.info("[BOT] Starting bot as standalone script...")
     try:
         bot.run(LEADERBOARDBOT_TOKEN) # Changed: client -> bot

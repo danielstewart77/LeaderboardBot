@@ -1,116 +1,139 @@
 #!/bin/bash
 
 # deploy_azure.sh
-# This script automates building and pushing Docker images to Azure Container Registry (ACR)
-# and updating existing Azure Container Apps for both the bot and the API.
+# Automates build/push to Azure Container Registry (ACR) and updates Azure Container Apps.
 
-# --- Configuration Variables (IMPORTANT: Update if necessary!) ---
+# --- Configuration ---
 ACR_NAME="warriorleaderboardregistry"
 RESOURCE_GROUP="Personal_Fun"
 
-BOT_IMAGE_NAME="leaderboardbot/bot"       # Image name for the bot in ACR
-API_IMAGE_NAME="leaderboardbot/api"       # Image name for the API in ACR
-IMAGE_TAG="latest"                        # Or a specific version tag, e.g., "1.0.0"
+BOT_IMAGE_NAME="leaderboardbot/bot"
+API_IMAGE_NAME="leaderboardbot/api"
+IMAGE_TAG=$(date +%Y%m%d-%H%M%S)  # ⬅️ Dynamic tag per deploy
 
-# Existing Container App names in Azure
 EXISTING_BOT_CONTAINER_APP_NAME="leaderboard-bot-container"
-EXISTING_API_CONTAINER_APP_NAME="leaderboard-api-container" # New variable for the API app
+EXISTING_API_CONTAINER_APP_NAME="leaderboard-api-container"
 
-# --- Safety Check for Placeholders (Adjust if you have different default placeholders) ---
+# --- Verify Configuration ---
 if [[ "${ACR_NAME}" == "YOUR_ACR_NAME" || "${RESOURCE_GROUP}" == "YOUR_RESOURCE_GROUP" ]]; then
-    echo "ERROR: Please replace placeholder values for ACR_NAME and RESOURCE_GROUP in this script before running."
+    echo "ERROR: Replace ACR_NAME and RESOURCE_GROUP in the script."
     exit 1
 fi
 
-echo "--- Starting Azure Deployment Script ---"
+echo "--- Starting Azure Deployment ---"
+echo "🕓 Using image tag: ${IMAGE_TAG}"
 
-# --- Azure Authentication ---
-echo "
---- Step 1: Azure CLI Login ---"
-echo "If you are not already logged in, a browser window will open for authentication."
+# --- Azure CLI Login ---
 if ! az account show > /dev/null 2>&1; then
     az login
 else
-    echo "Already logged into Azure CLI."
+    echo "✅ Already logged into Azure CLI."
 fi
 
-echo "
---- Step 2: Azure Container Registry (ACR) Login ---"
-az acr login --name "${ACR_NAME}"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to login to ACR. Please check your ACR name and Azure permissions."
+# --- ACR Login ---
+echo "🔐 Logging into ACR..."
+az acr login --name "${ACR_NAME}" || {
+    echo "❌ Failed to login to ACR."
     exit 1
-fi
-echo "Successfully logged into ACR: ${ACR_NAME}"
+}
 
-# --- Build and Push Discord Bot Image ---
-echo "
---- Step 3: Building Discord Bot Docker Image ---"
-echo "Image will be tagged as: ${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}"
-docker build -t "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}" -f Dockerfile.bot .
-if [ $? -ne 0 ]; then
-    echo "ERROR: Docker build for Bot failed."
+# --- Build and Push Bot Image ---
+echo "🐳 Building Bot Docker Image..."
+docker build -t "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}" -f Dockerfile.bot . || {
+    echo "❌ Docker build failed for bot."
     exit 1
-fi
-echo "Bot image built successfully."
+}
 
-echo "
---- Step 4: Pushing Discord Bot Image to ACR ---"
-docker push "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Docker push for Bot image failed."
+echo "📤 Pushing Bot Image..."
+docker push "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}" || {
+    echo "❌ Docker push failed for bot."
     exit 1
-fi
-echo "Bot image pushed to ACR successfully."
+}
 
-# --- Update Existing Bot Container App ---
-echo "
---- Step 5: Updating Azure Container App '${EXISTING_BOT_CONTAINER_APP_NAME}' for the Bot ---"
-az containerapp update --name "${EXISTING_BOT_CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --image "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to update Container App '${EXISTING_BOT_CONTAINER_APP_NAME}'."
-    echo "Please ensure the app exists, the resource group is correct, and you have permissions."
-    # exit 1 # Consider if you want to halt on failure
-else
-    echo "Container App '${EXISTING_BOT_CONTAINER_APP_NAME}' updated successfully to use the new bot image."
-fi
-echo "REMINDER: For '${EXISTING_BOT_CONTAINER_APP_NAME}', ensure LEADERBOARDBOT_TOKEN (secret) and API_BASE_URL environment variables are set correctly in the Azure Portal."
+# --- Update Bot Container App ---
+echo "🚀 Updating Bot Container App..."
+az containerapp update \
+  --name "${EXISTING_BOT_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --image "${ACR_NAME}.azurecr.io/${BOT_IMAGE_NAME}:${IMAGE_TAG}" \
+  --min-replicas 1 \
+  --max-replicas 1 \
+  --revision-suffix "${IMAGE_TAG}" || {
+    echo "❌ Failed to update bot container app."
+}
 
-# --- Build and Push FastAPI API Image ---
-echo "
---- Step 6: Building FastAPI API Docker Image ---"
-echo "Image will be tagged as: ${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}"
-docker build -t "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}" -f Dockerfile.api .
-if [ $? -ne 0 ]; then
-    echo "ERROR: Docker build for API failed."
+# --- Build and Push API Image ---
+echo "🐳 Building API Docker Image..."
+docker build -t "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}" -f Dockerfile.api . || {
+    echo "❌ Docker build failed for API."
     exit 1
-fi
-echo "API image built successfully."
+}
 
-echo "
---- Step 7: Pushing FastAPI API Image to ACR ---"
-docker push "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Docker push for API image failed."
+echo "📤 Pushing API Image..."
+docker push "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}" || {
+    echo "❌ Docker push failed for API."
     exit 1
+}
+
+# --- Update API Container App ---
+echo "🚀 Updating API Container App..."
+az containerapp update \
+  --name "${EXISTING_API_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --image "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}" \
+  --min-replicas 1 \
+  --max-replicas 3 \
+  --revision-suffix "${IMAGE_TAG}" || {
+    echo "❌ Failed to update API container app."
+}
+
+# --- Check Status ---
+echo "🔍 Verifying Container Status..."
+
+echo "📦 Bot Container:"
+az containerapp revision list \
+  --name "${EXISTING_BOT_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --query "[0].{name:name,active:properties.active,healthy:properties.healthState,replicas:properties.replicas}" \
+  --output table
+
+echo "📦 API Container:"
+az containerapp revision list \
+  --name "${EXISTING_API_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --query "[0].{name:name,active:properties.active,healthy:properties.healthState,replicas:properties.replicas}" \
+  --output table
+
+# --- Optional: Restart Revisions ---
+echo "🔁 Restarting Active Revisions..."
+
+BOT_REVISION=$(az containerapp revision list \
+  --name "${EXISTING_BOT_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --query "[?properties.active].{name:name}[0].name" \
+  --output tsv)
+
+if [ -n "$BOT_REVISION" ]; then
+  echo "Restarting bot: $BOT_REVISION"
+  az containerapp revision restart \
+    --name "${EXISTING_BOT_CONTAINER_APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --revision "$BOT_REVISION"
 fi
-echo "API image pushed to ACR successfully."
 
-# --- Update Existing API Container App ---
-echo "
---- Step 8: Updating Azure Container App '${EXISTING_API_CONTAINER_APP_NAME}' for the API ---"
-az containerapp update --name "${EXISTING_API_CONTAINER_APP_NAME}" --resource-group "${RESOURCE_GROUP}" --image "${ACR_NAME}.azurecr.io/${API_IMAGE_NAME}:${IMAGE_TAG}"
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to update Container App '${EXISTING_API_CONTAINER_APP_NAME}'."
-    echo "Please ensure the app exists, the resource group is correct, and you have permissions."
-    # exit 1 # Consider if you want to halt on failure
-else
-    echo "Container App '${EXISTING_API_CONTAINER_APP_NAME}' updated successfully to use the new API image."
+API_REVISION=$(az containerapp revision list \
+  --name "${EXISTING_API_CONTAINER_APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --query "[?properties.active].{name:name}[0].name" \
+  --output tsv)
+
+if [ -n "$API_REVISION" ]; then
+  echo "Restarting API: $API_REVISION"
+  az containerapp revision restart \
+    --name "${EXISTING_API_CONTAINER_APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --revision "$API_REVISION"
 fi
-echo "REMINDER: For '${EXISTING_API_CONTAINER_APP_NAME}', ensure PostgreSQL connection variables (POSTGRES_HOST, _USER, _PASSWORD as secret, _DB, _PORT) and RUN_DISCORD_BOT=0 are set correctly in the Azure Portal."
-echo "Once '${EXISTING_API_CONTAINER_APP_NAME}' is updated and running, note its Application URL."
 
-
-
-echo "
---- Azure Deployment Script Finished ---"
+echo "✅ Deployment Complete"
+echo "📋 Monitor logs: az containerapp logs show --name <app-name> --resource-group ${RESOURCE_GROUP} --follow"

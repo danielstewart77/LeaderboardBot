@@ -5,7 +5,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Add /app to PYTHONPATH to allow absolute imports from the app root
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+ENV PYTHONPATH="/app"
 
 # Install system dependencies required by Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
