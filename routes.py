@@ -16,7 +16,9 @@ FACETS = [
     "daily_quiet_time",
     "team_call_attendance",
     "daily_journaling",
-    "weekly_curriculum"
+    "weekly_curriculum",
+    "bonus",
+    "brotherhood_check_in"
 ]
 
 # Ensure templates directory exists

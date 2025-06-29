@@ -31,14 +31,18 @@ FACET_MAP = {
     "quiet_time": "daily_quiet_time",
     "team_call": "team_call_attendance",
     "journal": "daily_journaling",
-    "homework": "weekly_curriculum"
+    "homework": "weekly_curriculum",
+    "bonus": "bonus",
+    "check_in": "brotherhood_check_in"
 }
 
 DEFAULT_FACET_POINTS = {
     "daily_quiet_time": 5,
     "team_call_attendance": 15,
     "daily_journaling": 2,
-    "weekly_curriculum": 15
+    "weekly_curriculum": 15,
+    "bonus": 15,
+    "brotherhood_check_in": 15
 }
 
 intents = discord.Intents.default()
@@ -148,6 +152,16 @@ async def journal_slash(interaction: discord.Interaction, member: discord.Member
 @app_commands.describe(member="The member to credit.", points="Custom points to award (optional).")
 async def homework_slash(interaction: discord.Interaction, member: discord.Member, points: Optional[int] = None):
     await update_score_for_facet(interaction, member, "homework", points)
+
+@bot.tree.command(name="bonus", description="Award bonus points to a member.")
+@app_commands.describe(member="The member to credit.", points="Custom points to award (optional).")
+async def bonus_slash(interaction: discord.Interaction, member: discord.Member, points: Optional[int] = None):
+    await update_score_for_facet(interaction, member, "bonus", points)
+
+@bot.tree.command(name="check_in", description="Log daily check-in.")
+@app_commands.describe(member="The member to credit.", points="Custom points to award (optional).")
+async def check_in_slash(interaction: discord.Interaction, member: discord.Member, points: Optional[int] = None):
+    await update_score_for_facet(interaction, member, "check_in", points)
 
 @bot.tree.command(name="my_score", description="Show a user's individual scores for all facets.")
 @app_commands.describe(user="The user to check scores for.")
