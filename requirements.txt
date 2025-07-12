@@ -1,7 +1,7 @@
 discord.py
 python-dotenv
 fastapi
-uvicorn
+uvicorn[standard]
 aiohttp
 Jinja2
 playwright

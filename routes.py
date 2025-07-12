@@ -29,6 +29,17 @@ if not os.path.exists(TEMPLATES_DIR):
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
+# Add custom template function to ensure HTTPS URLs
+def https_url_for(request: Request, name: str, **kwargs):
+    """Generate HTTPS URL for static files"""
+    url = request.url_for(name, **kwargs)
+    # Force HTTPS scheme by string replacement
+    https_url = str(url).replace("http://", "https://", 1)
+    return https_url
+
+# Add the custom function to template globals
+templates.env.globals['https_url_for'] = https_url_for
+
 @router.post("/score")
 async def update_score(payload: ScoreUpdate, db: Session = Depends(get_db)):
     if payload.facet not in FACETS:
