@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from models import ScoreUpdate, TeamCreate, UserTeamAssign
-from database import get_db, add_score as db_add_score, get_leaderboard_data as db_get_leaderboard_data, get_all_scores_by_user, add_team, add_user_to_team, get_all_teams, get_all_users, get_team_leaderboard_data
+from database import get_db, add_score as db_add_score, get_leaderboard_data as db_get_leaderboard_data, get_all_scores_by_user, add_team, add_user_to_team, get_all_teams, get_all_users, get_team_leaderboard_data, get_all_users_with_scores
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 import tempfile
@@ -246,3 +246,9 @@ def get_team_scores_route(team_name: str, db: Session = Depends(get_db)):
         "facet_scores": facet_totals,
         "members": member_names
     }
+
+@router.get("/get_all_users_with_scores", response_class=JSONResponse)
+def get_all_users_with_scores_route(db: Session = Depends(get_db)):
+    """Get all users with their total scores, ordered by score descending."""
+    users_with_scores = get_all_users_with_scores(db)
+    return users_with_scores

@@ -1,28 +1,44 @@
+networks:
+  sparkwork:
+    driver: bridge
+  traefik-global:
+    external: true
+
 services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile_api
-    ports:
-      - "8000:8000" # Map host port 8000 to container port 8000
-    volumes:
-      - .:/app  # Mount current directory to /app in container for live code changes
+      dockerfile: Dockerfile.api
+    container_name: leaderboard-api
+    restart: unless-stopped
     environment:
-      # Add any API-specific environment variables here if needed in the future
-      # e.g., DATABASE_URL if you switch from SQLite
-      PYTHONUNBUFFERED: 1 # Ensures print statements and logs are sent straight to the console
+      PYTHONUNBUFFERED: 1
+      # Optional app-specific secrets/env here...
+      # - ENVIRONMENT=production
+    networks:
+      - sparkwork
+      - traefik-global
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.leaderboard-api.rule=Host(`leaderboard-api.sparktobloom.com`)"
+      - "traefik.http.routers.leaderboard-api.entrypoints=web"
+      - "traefik.http.routers.leaderboard-api.priority=100"
+      - "traefik.http.services.leaderboard-api.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik-global"
 
   bot:
     build:
       context: .
-      dockerfile: Dockerfile.bot # Assuming your original Dockerfile is for the bot
+      dockerfile: Dockerfile.bot
+    container_name: leaderboard-bot
+    restart: unless-stopped
     environment:
-      LEADERBOARDBOT_TOKEN: ${LEADERBOARDBOT_TOKEN} # Get token from .env file or host environment
-      API_BASE_URL: http://api:8000 # Bot will connect to the api service on port 8000
+      LEADERBOARDBOT_TOKEN: ${LEADERBOARDBOT_TOKEN}
+      API_BASE_URL: http://leaderboard-api:8000  # Use internal Docker DNS
       PYTHONUNBUFFERED: 1
     depends_on:
-      - api # Ensures the API starts before the bot attempts to connect
+      - api
     volumes:
-      - .:/app # Mount current directory to /app in container for live code changes
-
-# You can define networks here if needed, but the default bridge network usually works for this setup.
+      - .:/app
+    networks:
+      - sparkwork

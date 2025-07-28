@@ -222,6 +222,253 @@ async def team_autocomplete(
         except Exception:
             return []
 
+@bot.tree.command(name="create_team", description="Create a new team.")
+@app_commands.describe(team_name="The name of the team to create.")
+async def create_team_slash(interaction: discord.Interaction, team_name: str):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            payload = {"name": team_name}
+            async with session.post(f"{API_BASE_URL}/create_team", json=payload) as resp:
+                if resp.status == 200:
+                    team_data = await resp.json()
+                    embed = discord.Embed(
+                        title="🎉 Team Created Successfully!",
+                        description=f"Team **{team_data['name']}** has been created.",
+                        color=0x00ff00
+                    )
+                    embed.add_field(name="Team ID", value=team_data['id'], inline=True)
+                    embed.add_field(name="Team Name", value=team_data['name'], inline=True)
+                    await interaction.followup.send(embed=embed)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /create_team: {resp.status} - {error_message}")
+                    
+                    # Handle specific error cases
+                    if resp.status == 400:
+                        await interaction.followup.send(f"❌ Team '{team_name}' already exists!", ephemeral=True)
+                    else:
+                        await interaction.followup.send(f"❌ Failed to create team. API Error: {resp.status}", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error creating team: {e}")
+            await interaction.followup.send("❌ Could not connect to the Leaderboard API to create the team.", ephemeral=True)
+
+@bot.tree.command(name="add_to_team", description="Add a user to a team.")
+@app_commands.describe(
+    user="The user to add to the team.",
+    team_name="The team to add the user to."
+)
+@app_commands.autocomplete(team_name=team_autocomplete)
+async def add_to_team_slash(interaction: discord.Interaction, user: discord.Member, team_name: str):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            payload = {
+                "user_name": str(user),
+                "team_name": team_name
+            }
+            async with session.post(f"{API_BASE_URL}/assign_user_to_team", json=payload) as resp:
+                if resp.status == 200:
+                    assignment_data = await resp.json()
+                    embed = discord.Embed(
+                        title="👥 User Added to Team!",
+                        description=f"**{user.display_name}** has been added to team **{assignment_data['team_name']}**.",
+                        color=0x00ff00
+                    )
+                    embed.add_field(name="User", value=assignment_data['user_name'], inline=True)
+                    embed.add_field(name="Team", value=assignment_data['team_name'], inline=True)
+                    embed.set_thumbnail(url=user.display_avatar.url)
+                    await interaction.followup.send(embed=embed)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /assign_user_to_team: {resp.status} - {error_message}")
+                    
+                    # Handle specific error cases
+                    if resp.status == 404:
+                        await interaction.followup.send(f"❌ Team '{team_name}' not found!", ephemeral=True)
+                    else:
+                        await interaction.followup.send(f"❌ Failed to add user to team. API Error: {resp.status}", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error adding user to team: {e}")
+            await interaction.followup.send("❌ Could not connect to the Leaderboard API to add user to team.", ephemeral=True)
+
+@bot.tree.command(name="list_teams", description="List all available teams.")
+async def list_teams_slash(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"{API_BASE_URL}/get_teams") as resp:
+                if resp.status == 200:
+                    teams = await resp.json()
+                    
+                    if not teams:
+                        embed = discord.Embed(
+                            title="📋 Teams List",
+                            description="No teams have been created yet.",
+                            color=0xffa500
+                        )
+                    else:
+                        embed = discord.Embed(
+                            title="📋 Available Teams",
+                            color=0x3498db
+                        )
+                        
+                        # Split teams into chunks for better display
+                        team_chunks = [teams[i:i+10] for i in range(0, len(teams), 10)]
+                        
+                        for i, chunk in enumerate(team_chunks):
+                            field_name = "Teams" if i == 0 else f"Teams (continued {i+1})"
+                            team_list = "\n".join([f"• {team}" for team in chunk])
+                            embed.add_field(name=field_name, value=team_list, inline=False)
+                        
+                        embed.set_footer(text=f"Total teams: {len(teams)}")
+                    
+                    await interaction.followup.send(embed=embed)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /get_teams: {resp.status} - {error_message}")
+                    await interaction.followup.send(f"❌ Failed to fetch teams. API Error: {resp.status}", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error fetching teams: {e}")
+            await interaction.followup.send("❌ Could not connect to the Leaderboard API to fetch teams.", ephemeral=True)
+
+class UsersPaginationView(discord.ui.View):
+    def __init__(self, users_data, per_page=20):
+        super().__init__(timeout=300)  # 5 minutes timeout
+        self.users_data = users_data
+        self.per_page = per_page
+        self.current_page = 0
+        self.total_pages = (len(users_data) + per_page - 1) // per_page
+        
+        # Disable buttons if only one page
+        if self.total_pages <= 1:
+            self.previous_button.disabled = True
+            self.next_button.disabled = True
+        else:
+            self.previous_button.disabled = True  # Start with previous disabled
+    
+    def get_embed(self):
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        page_users = self.users_data[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="👥 All Users Leaderboard",
+            description="All users ranked by total points",
+            color=0xffd700
+        )
+        
+        # Build the leaderboard string for current page
+        leaderboard_text = ""
+        for i, user_data in enumerate(page_users, start_idx + 1):
+            user_name = user_data['user_id']
+            total_score = user_data['total_score']
+            team_name = user_data['team_name']
+            
+            # Add medal emojis for top 3 (globally, not per page)
+            if i == 1:
+                rank_emoji = "🥇"
+            elif i == 2:
+                rank_emoji = "🥈"
+            elif i == 3:
+                rank_emoji = "🥉"
+            else:
+                rank_emoji = f"{i}."
+            
+            team_display = f" ({team_name})" if team_name != "No Team" else ""
+            leaderboard_text += f"{rank_emoji} **{user_name}**{team_display} - {total_score} pts\n"
+        
+        # Split into multiple fields if needed (Discord has field value limits)
+        if len(leaderboard_text) > 1024:
+            # Split the text into chunks
+            lines = leaderboard_text.strip().split('\n')
+            chunks = []
+            current_chunk = ""
+            
+            for line in lines:
+                if len(current_chunk + line + '\n') > 1024:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = line + '\n'
+                else:
+                    current_chunk += line + '\n'
+            
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            
+            # Add fields for each chunk
+            for i, chunk in enumerate(chunks):
+                field_name = "Rankings" if i == 0 else f"Rankings (continued {i+1})"
+                embed.add_field(name=field_name, value=chunk, inline=False)
+        else:
+            embed.add_field(name="Rankings", value=leaderboard_text, inline=False)
+        
+        # Add footer with pagination info
+        embed.set_footer(text=f"Page {self.current_page + 1} of {self.total_pages} • Total users: {len(self.users_data)}")
+        
+        return embed
+    
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.primary)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page -= 1
+        
+        # Update button states
+        self.previous_button.disabled = self.current_page == 0
+        self.next_button.disabled = False
+        
+        embed = self.get_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.current_page += 1
+        
+        # Update button states
+        self.next_button.disabled = self.current_page == self.total_pages - 1
+        self.previous_button.disabled = False
+        
+        embed = self.get_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def on_timeout(self):
+        # Disable all buttons when the view times out
+        self.previous_button.disabled = True
+        self.next_button.disabled = True
+
+@bot.tree.command(name="all_users", description="Show all users ordered by total points (descending).")
+async def all_users_slash(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=False)
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"{API_BASE_URL}/get_all_users_with_scores") as resp:
+                if resp.status == 200:
+                    users_data = await resp.json()
+                    
+                    if not users_data:
+                        embed = discord.Embed(
+                            title="👥 All Users",
+                            description="No users with scores found.",
+                            color=0xffa500
+                        )
+                        await interaction.followup.send(embed=embed)
+                        return
+                    
+                    # Create pagination view
+                    view = UsersPaginationView(users_data)
+                    embed = view.get_embed()
+                    
+                    await interaction.followup.send(embed=embed, view=view)
+                else:
+                    error_message = await resp.text()
+                    logger.error(f"API Error for /get_all_users_with_scores: {resp.status} - {error_message}")
+                    await interaction.followup.send(f"❌ Failed to fetch user scores. API Error: {resp.status}", ephemeral=True)
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection Error fetching all users: {e}")
+            await interaction.followup.send("❌ Could not connect to the Leaderboard API to fetch user data.", ephemeral=True)
+
 @bot.tree.command(name="my_team", description="Show team's total scores for all facets.")
 @app_commands.describe(team_name="The team to check scores for.")
 @app_commands.autocomplete(team_name=team_autocomplete)

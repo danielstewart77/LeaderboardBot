@@ -1,0 +1,45 @@
+steps:
+  # 🧪 BUILD APP
+  build:
+    image: python:3.12-slim
+    commands:
+      - echo "🔧 Installing system dependencies..."
+      - apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
+      - echo "📦 Installing Python dependencies from requirements.txt..."
+      - pip install --timeout 1000 --retries 5 -r requirements.txt
+      - echo "✅ Build complete"
+
+  # 🚀 DEPLOY APP
+  deploy:
+    image: docker:cli
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/daniel/deploy/leaderboard:/mnt/deploy
+    commands:
+      - echo "🚀 Starting deployment..."
+      - mkdir -p /mnt/deploy
+      - echo "🧹 Stopping old containers..."
+      - docker stop leaderboard-api leaderboard-bot || true
+      - docker rm leaderboard-api leaderboard-bot || true
+      - echo "🗑️ Cleaning old files..."
+      - rm -rf /mnt/deploy/* || true
+      - echo "📦 Copying new project files..."
+      - cp -r ./* /mnt/deploy/
+      - cd /mnt/deploy
+      - echo "🔧 Rebuilding containers..."
+      - docker compose down || true
+      - docker compose up -d --build --force-recreate
+      - echo "✅ Deployment complete"
+
+  # 🧹 CLEANUP
+  cleanup:
+    image: docker/compose:latest
+    commands:
+      - echo "🧹 Pruning unused containers and volumes..."
+      - docker compose down --remove-orphans || true
+      - docker system prune -f || true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    when:
+      branch: master

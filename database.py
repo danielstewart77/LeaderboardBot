@@ -133,3 +133,29 @@ def get_team_leaderboard_data(db: Session) -> List[Dict[str, Any]]:
         for row in query_result
     ]
     return team_leaderboard_list
+
+def get_all_users_with_scores(db: Session) -> List[Dict[str, Any]]:
+    """
+    Fetches all users with their total scores, ordered by total score descending.
+    Each item contains user_id, total_score, and team_name.
+    """
+    query_result = db.query(
+        Leaderboard.user_id,
+        func.sum(Leaderboard.score).label('total_score'),
+        Team.name.label('team_name')
+    ).outerjoin(User, User.name == Leaderboard.user_id)\
+     .outerjoin(Team, Team.id == User.group_id)\
+     .group_by(Leaderboard.user_id, Team.name)\
+     .order_by(func.sum(Leaderboard.score).desc())\
+     .all()
+
+    # Convert the list of Row objects to a list of dictionaries
+    users_list = [
+        {
+            "user_id": row.user_id, 
+            "total_score": row.total_score, 
+            "team_name": row.team_name if row.team_name else "No Team"
+        }
+        for row in query_result
+    ]
+    return users_list
