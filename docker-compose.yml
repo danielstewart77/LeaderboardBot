@@ -16,6 +16,7 @@ services:
       # Optional app-specific secrets/env here...
       # - ENVIRONMENT=production
     networks:
+      - sparkwork
       - traefik-global
     labels:
       - "traefik.enable=true"
@@ -38,4 +39,4 @@ services:
     depends_on:
       - api
     networks:
-      - traefik-global
+      - sparkwork
