@@ -16,7 +16,6 @@ services:
       # Optional app-specific secrets/env here...
       # - ENVIRONMENT=production
     networks:
-      - sparkwork
       - traefik-global
     labels:
       - "traefik.enable=true"
@@ -34,11 +33,9 @@ services:
     restart: unless-stopped
     environment:
       LEADERBOARDBOT_TOKEN: ${LEADERBOARDBOT_TOKEN}
-      API_BASE_URL: http://192.168.5.10:8000  # Use internal Docker DNS
+      API_BASE_URL: http://leaderboard-api:8000  # Use Docker service name for internal communication
       PYTHONUNBUFFERED: 1
     depends_on:
       - api
-    volumes:
-      - .:/app
     networks:
-      - sparkwork
+      - traefik-global
